@@ -38,7 +38,7 @@ export function middleware(request: NextRequest) {
         // Validate IP format
         if (!isValidIP(ip)) {
             console.error(`[Middleware] ❌ Invalid IP format: ${ip}`);
-            return createAccessDeniedResponse(pathname, ip, 'Invalid IP format');
+            return createAccessDeniedResponse(request, ip, 'Invalid IP format');
         }
 
         // 3. Check if IP is in allowed ranges
@@ -47,7 +47,7 @@ export function middleware(request: NextRequest) {
         if (!isAllowed) {
             const timestamp = new Date().toISOString();
             console.log(`[Middleware] 🚫 Access Denied | Time: ${timestamp} | IP: ${ip} | Path: ${pathname} | Role: ${role || 'none'}`);
-            return createAccessDeniedResponse(pathname, ip);
+            return createAccessDeniedResponse(request, ip);
         }
 
         // Access granted
@@ -59,8 +59,10 @@ export function middleware(request: NextRequest) {
 
 /**
  * Create appropriate access denied response
+ * NOTE: We use the full request URL to avoid runtime errors in middleware.
  */
-function createAccessDeniedResponse(pathname: string, ip: string, reason?: string): NextResponse {
+function createAccessDeniedResponse(request: NextRequest, ip: string, reason?: string): NextResponse {
+    const { pathname } = request.nextUrl;
     // For API routes, return 403 JSON
     if (pathname.startsWith('/api/')) {
         return NextResponse.json(
@@ -75,8 +77,9 @@ function createAccessDeniedResponse(pathname: string, ip: string, reason?: strin
         );
     }
 
-    // For Pages, redirect to access-denied with IP info
-    const url = new URL('/access-denied', pathname);
+    // For Pages, redirect to /access-denied with IP info
+    const url = request.nextUrl.clone();
+    url.pathname = '/access-denied';
     url.searchParams.set('ip', ip);
     if (reason) {
         url.searchParams.set('reason', reason);
