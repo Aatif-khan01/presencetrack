@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { extractIPFromHeaders, isIPAllowed, isValidIP } from '@/lib/ip-validator';
 
 // Load configuration from environment variables
-const ALLOWED_IP_RANGES = process.env.ALLOWED_IP_RANGES?.split(',').map(r => r.trim()) || ['192.168.29.0/24'];
+const ALLOWED_IP_RANGES = process.env.ALLOWED_IP_RANGES?.split(',').map(r => r.trim()) || ['49.36.201.5/32'];
 const ALLOWED_LOCALHOST = process.env.ALLOWED_LOCALHOST !== 'false';
 const BYPASS_WIFI_CHECK = process.env.BYPASS_WIFI_CHECK === 'true';
 
@@ -91,3 +91,4 @@ function createAccessDeniedResponse(request: NextRequest, ip: string, reason?: s
 export const config = {
     matcher: ['/room/:path*', '/api/attendance/:path*', '/api/network-status'],
 };
+
