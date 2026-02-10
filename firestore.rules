@@ -1,0 +1,170 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Get user document
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Check if user is a student
+    function isStudent() {
+      return isAuthenticated() && getUserData().role == 'student';
+    }
+    
+    // Check if user is a teacher
+    function isTeacher() {
+      return isAuthenticated() && getUserData().role == 'teacher';
+    }
+    
+    // Check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Check if teacher owns the room
+    function isRoomOwner(roomId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/rooms/$(roomId)).data.teacherId == request.auth.uid;
+    }
+    
+    // Check if student is a member of the room
+    function isRoomMember(roomId, studentId) {
+      return exists(/databases/$(database)/documents/members/$(roomId + '_' + studentId));
+    }
+    
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+    match /users/{userId} {
+      // Anyone can read their own profile
+      allow read: if isOwner(userId);
+      
+      // Users can create their own profile during signup
+      allow create: if isOwner(userId) && 
+                      request.resource.data.keys().hasAll(['name', 'email', 'role', 'createdAt']) &&
+                      request.resource.data.role in ['student', 'teacher'];
+      
+      // Users can update their own profile, but NOT the role or enrollmentNumber
+      allow update: if isOwner(userId) && 
+                      request.resource.data.role == resource.data.role &&
+                      (!resource.data.keys().hasAny(['enrollmentNumber']) || 
+                       request.resource.data.enrollmentNumber == resource.data.enrollmentNumber);
+      
+      // No one can delete user documents
+      allow delete: if false;
+    }
+    
+    // ============================================
+    // ROOMS COLLECTION
+    // ============================================
+    match /rooms/{roomId} {
+      // Anyone authenticated can read rooms (for browsing/joining)
+      allow read: if isAuthenticated();
+      
+      // Only teachers can create rooms
+      allow create: if isTeacher() && 
+                      request.resource.data.teacherId == request.auth.uid &&
+                      request.resource.data.keys().hasAll(['roomName', 'courseCode', 'teacherId', 'createdAt']);
+      
+      // Only the room owner (teacher) can update their room
+      allow update: if isRoomOwner(roomId) &&
+                      request.resource.data.teacherId == resource.data.teacherId; // Prevent changing owner
+      
+      // Only the room owner can delete their room
+      allow delete: if isRoomOwner(roomId);
+    }
+    
+    // ============================================
+    // MEMBERS COLLECTION (Room Enrollment)
+    // ============================================
+    match /members/{memberId} {
+      // Students can read their own memberships
+      // Teachers can read memberships for their rooms
+      allow read: if isAuthenticated() && 
+                    (resource.data.studentId == request.auth.uid || 
+                     isRoomOwner(resource.data.roomId));
+      
+      // Students can join rooms (create membership)
+      allow create: if isStudent() && 
+                      request.resource.data.studentId == request.auth.uid &&
+                      request.resource.data.keys().hasAll(['roomId', 'studentId', 'enrollmentNumber', 'studentName', 'joinedAt']);
+      
+      // No one can update memberships
+      allow update: if false;
+      
+      // Students can leave rooms (delete membership)
+      // Teachers can remove students from their rooms
+      allow delete: if (isStudent() && resource.data.studentId == request.auth.uid) ||
+                      isRoomOwner(resource.data.roomId);
+    }
+    
+    // ============================================
+    // SESSIONS COLLECTION (Attendance Sessions)
+    // ============================================
+    match /sessions/{sessionId} {
+      // Anyone can read sessions (to check if active)
+      allow read: if isAuthenticated();
+      
+      // Only room owner can create sessions
+      allow create: if isTeacher() && 
+                      isRoomOwner(request.resource.data.roomId) &&
+                      request.resource.data.keys().hasAll(['roomId', 'date', 'active', 'createdAt']);
+      
+      // Only room owner can update sessions (to end them)
+      allow update: if isTeacher() && 
+                      isRoomOwner(resource.data.roomId) &&
+                      resource.data.roomId == request.resource.data.roomId; // Prevent changing room
+      
+      // Only room owner can delete sessions
+      allow delete: if isTeacher() && isRoomOwner(resource.data.roomId);
+    }
+    
+    // ============================================
+    // ATTENDANCE COLLECTION (Attendance Records)
+    // ============================================
+    match /attendance/{attendanceId} {
+      // Students can read their own attendance
+      // Teachers can read attendance for their rooms
+      allow read: if isAuthenticated() && 
+                    (resource.data.studentId == request.auth.uid || 
+                     isRoomOwner(resource.data.roomId));
+      
+      // Students can mark their own attendance
+      // Must be during an active session
+      // Must be a member of the room
+      allow create: if isStudent() && 
+                      request.resource.data.studentId == request.auth.uid &&
+                      request.resource.data.keys().hasAll(['sessionId', 'roomId', 'studentId', 'status', 'timestamp']) &&
+                      request.resource.data.status == 'present' &&
+                      // Verify session is active
+                      get(/databases/$(database)/documents/sessions/$(request.resource.data.sessionId)).data.active == true &&
+                      // Verify student is a member
+                      exists(/databases/$(database)/documents/members/$(request.resource.data.roomId + '_' + request.auth.uid));
+      
+      // Attendance records are immutable after creation
+      allow update: if false;
+      
+      // Only teachers can delete attendance records (for corrections)
+      allow delete: if isTeacher() && isRoomOwner(resource.data.roomId);
+    }
+    
+    // ============================================
+    // DEFAULT DENY ALL
+    // ============================================
+    // Any collection not explicitly defined above is denied
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
