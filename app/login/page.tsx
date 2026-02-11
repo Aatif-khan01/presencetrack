@@ -60,6 +60,9 @@ export default function LoginPage() {
       if (data.isNewUser) {
         // Store selected role for profile completion page to use
         localStorage.setItem("pending_role", selectedRole)
+        // CRITICAL FIX: Store the partial user data so CompleteProfilePage has it
+        localStorage.setItem("presence_user", JSON.stringify(data.user))
+        
         toast.success("Welcome! Please complete your profile.")
         router.push("/complete-profile")
         return
