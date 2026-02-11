@@ -83,7 +83,8 @@ export default function LoginPage() {
     localStorage.setItem("presence_user", JSON.stringify(data.user))
 
     // Set cookie for middleware access control
-    document.cookie = `presence_role=${data.user.role}; path=/; max-age=86400; SameSite=Lax`
+    const isSecure = window.location.protocol === 'https:';
+    document.cookie = `presence_role=${data.user.role}; path=/; max-age=86400; SameSite=Lax${isSecure ? '; Secure' : ''}`;
 
     toast.success(isLogin ? "Welcome back!" : "Account created successfully!")
 

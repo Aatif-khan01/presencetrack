@@ -27,9 +27,11 @@ export function middleware(request: NextRequest) {
         const roleCookie = request.cookies.get('presence_role');
         const role = roleCookie?.value;
 
-        if (role === 'teacher') {
+        if (role?.toLowerCase() === 'teacher') {
             console.log('[Middleware] ✅ Teacher access granted (role-based exemption)');
             return NextResponse.next();
+        } else {
+            console.log(`[Middleware] ℹ️ Role check failed. Cookie: ${role || 'missing'}, check: ${role === 'teacher'}`);
         }
 
         // 2. Extract and validate IP address
