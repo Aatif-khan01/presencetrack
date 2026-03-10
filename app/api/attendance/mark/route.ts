@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase"
 import {
     doc,
-
     getDoc,
     query,
     collection,
@@ -10,6 +9,7 @@ import {
     getDocs,
     addDoc,
 } from "firebase/firestore"
+import { checkRateLimit, getClientIP, sanitizeInput } from "@/lib/security"
 
 // Force dynamic rendering - don't try to build this at build time
 export const dynamic = 'force-dynamic';
@@ -20,22 +20,47 @@ export async function POST(request: Request) {
         // Validate Firebase is configured
         if (!db) {
             return NextResponse.json(
-                { error: "Firebase not configured" },
-                { status: 500 }
+                { error: "Service unavailable" },
+                { status: 503 }
             )
         }
 
-        const { sessionId, student } = await request.json()
-
-        if (!sessionId || !student || !student.id) {
+        // Rate limit: 10 requests per minute per IP (attendance marking)
+        const ip = getClientIP(request)
+        const rl = checkRateLimit(`attendance:${ip}`, 10, 60000)
+        if (!rl.allowed) {
             return NextResponse.json(
-                { error: "Missing required fields" },
+                { error: "Too many requests. Please try again later." },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+            )
+        }
+
+        const body = await request.json()
+        const { sessionId, student } = body
+
+        // Validate required fields
+        if (!sessionId || typeof sessionId !== 'string') {
+            return NextResponse.json(
+                { error: "Invalid session" },
                 { status: 400 }
             )
         }
 
-        // Verify session status
-        const sessionRef = doc(db, "sessions", sessionId)
+        if (!student || !student.id || typeof student.id !== 'string') {
+            return NextResponse.json(
+                { error: "Invalid student data" },
+                { status: 400 }
+            )
+        }
+
+        // Sanitize inputs
+        const cleanSessionId = sessionId.trim().slice(0, 128)
+        const cleanStudentId = student.id.trim().slice(0, 128)
+        const cleanStudentName = sanitizeInput(student.name || 'Unknown', 100)
+        const cleanEnrollmentNumber = sanitizeInput(student.enrollmentNumber || 'N/A', 30)
+
+        // Verify session exists and is active
+        const sessionRef = doc(db, "sessions", cleanSessionId)
         const sessionSnap = await getDoc(sessionRef)
 
         if (!sessionSnap.exists()) {
@@ -44,18 +69,34 @@ export async function POST(request: Request) {
 
         if (!sessionSnap.data().active) {
             return NextResponse.json(
-                { error: "Session is not active" },
+                { error: "Session is no longer active" },
                 { status: 400 }
             )
         }
 
         const roomId = sessionSnap.data().roomId
 
+        // Verify student is an approved member of the room
+        const memberQ = query(
+            collection(db, "members"),
+            where("roomId", "==", roomId),
+            where("studentId", "==", cleanStudentId),
+            where("status", "==", "approved")
+        )
+        const memberSnap = await getDocs(memberQ)
+
+        if (memberSnap.empty) {
+            return NextResponse.json(
+                { error: "You are not an approved member of this room" },
+                { status: 403 }
+            )
+        }
+
         // Check for duplicate attendance
         const q = query(
             collection(db, "attendance"),
-            where("sessionId", "==", sessionId),
-            where("studentId", "==", student.id)
+            where("sessionId", "==", cleanSessionId),
+            where("studentId", "==", cleanStudentId)
         )
         const snap = await getDocs(q)
 
@@ -66,23 +107,13 @@ export async function POST(request: Request) {
             )
         }
 
-        // Mark attendance
-        // Note: In a real app we would use Admin SDK here to bypass rules if needed,
-        // or ensure the server has auth context.
-        // Since we are using Client SDK in a server environment without explicit auth context passed,
-        // this relies on Firestore rules being open enough OR
-        // we hope the Client SDK instance here has sufficient permission (it's anonymous or public).
-        // Given earlier prompt instructions implied full Firebase implementation,
-        // rules might be blocking this if we don't auth.
-        // However, for this task, the goal is IP restriction.
-        // If this fails due to permisions, we'd need to init admin SDK.
-
+        // Mark attendance with sanitized data
         const newRecord = {
-            sessionId,
+            sessionId: cleanSessionId,
             roomId,
-            studentId: student.id,
-            enrollmentNumber: student.enrollmentNumber || "N/A",
-            studentName: student.name,
+            studentId: cleanStudentId,
+            enrollmentNumber: cleanEnrollmentNumber,
+            studentName: cleanStudentName,
             status: "PRESENT",
             timestamp: new Date().toISOString(),
         }
@@ -91,13 +122,11 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             message: "Attendance marked successfully",
-            record: newRecord,
         })
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-        console.error("API Error:", error)
+    } catch {
+        // SECURITY: Never leak internal error details to the client
         return NextResponse.json(
-            { error: error.message || "Internal Server Error" },
+            { error: "Failed to mark attendance. Please try again." },
             { status: 500 }
         )
     }
