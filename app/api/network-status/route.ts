@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { extractIPFromHeaders, isIPAllowed, isValidIP } from '@/lib/ip-validator';
+import { checkRateLimit, getClientIP } from '@/lib/security';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -10,10 +11,21 @@ const ALLOWED_LOCALHOST = process.env.ALLOWED_LOCALHOST !== 'false';
 
 /**
  * Network Status API
- * Returns the current IP address and whether it's allowed
+ * Returns whether the user is on campus Wi-Fi.
+ * SECURITY: Does NOT expose allowed ranges, internal headers, or diagnostics.
  */
 export async function GET(request: Request) {
     try {
+        // Rate limit: 60 requests per minute per IP
+        const clientIP = getClientIP(request);
+        const rl = checkRateLimit(`network:${clientIP}`, 60, 60000);
+        if (!rl.allowed) {
+            return NextResponse.json(
+                { success: false, error: 'Too many requests' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+            );
+        }
+
         // Extract IP from headers
         const headers = {
             get: (name: string) => request.headers.get(name)
@@ -29,30 +41,13 @@ export async function GET(request: Request) {
         return NextResponse.json({
             success: true,
             detectedIP: ip,
-            isValid,
             allowed: isAllowed,
-            isLocalhost: isLocal,
             onCampus,
-            allowedRanges: ALLOWED_IP_RANGES,
             timestamp: new Date().toISOString(),
-            diagnostics: {
-                isLocalhost: isLocal,
-                ipVersion: ip.includes(':') ? 'IPv6' : 'IPv4',
-                headers: {
-                    'x-forwarded-for': request.headers.get('x-forwarded-for'),
-                    'x-real-ip': request.headers.get('x-real-ip'),
-                    'cf-connecting-ip': request.headers.get('cf-connecting-ip'),
-                }
-            }
         });
-    } catch (error) {
-        console.error('[Network Status API] Error:', error);
+    } catch {
         return NextResponse.json(
-            {
-                success: false,
-                error: 'Failed to determine network status',
-                message: error instanceof Error ? error.message : 'Unknown error'
-            },
+            { success: false, error: 'Failed to determine network status' },
             { status: 500 }
         );
     }
