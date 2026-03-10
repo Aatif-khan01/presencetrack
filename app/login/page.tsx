@@ -13,7 +13,7 @@ import {
   CardFooter,
 } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Mail, Hash, ArrowLeft } from "lucide-react"
+import { User, Mail, Hash, ArrowLeft, KeyRound } from "lucide-react"
 import Image from "next/image"
 
 export default function LoginPage() {
@@ -23,6 +23,9 @@ export default function LoginPage() {
   )
   const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [resetEmail, setResetEmail] = useState("")
+  const [resetSent, setResetSent] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -98,6 +101,31 @@ export default function LoginPage() {
     }
   }
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resetEmail) {
+      toast.error("Please enter your email address")
+      return
+    }
+    setLoading(true)
+    try {
+      await authAPI.resetPassword(resetEmail)
+      setResetSent(true)
+      toast.success("Password reset link sent! Check your email.")
+    } catch (err: any) {
+      const errorMessage = err.code === 'auth/user-not-found'
+        ? 'No account found with this email address'
+        : err.code === 'auth/invalid-email'
+        ? 'Please enter a valid email address'
+        : err.code === 'auth/too-many-requests'
+        ? 'Too many requests. Please try again later.'
+        : err.message || 'Failed to send reset email'
+      toast.error(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Style constants
   const primaryColorClass =
     selectedRole === "student" ? "text-emerald-600" : "text-indigo-600"
@@ -116,7 +144,7 @@ export default function LoginPage() {
         <ArrowLeft className="mr-1 h-3 w-3 md:h-4 md:w-4" /> Back
       </Button>
 
-      <Card className="w-full max-w-sm mx-auto shadow-xl border-0 bg-card/80 backdrop-blur overflow-hidden">
+      <Card className="w-full max-w-sm mx-auto shadow-xl border-0 bg-card/80 backdrop-blur overflow-hidden relative">
         <Tabs
           defaultValue="student"
           value={selectedRole}
@@ -264,6 +292,19 @@ export default function LoginPage() {
                   minLength={6}
                   className="h-9 text-sm"
                 />
+                {isLogin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(true)
+                      setResetEmail(formData.email)
+                      setResetSent(false)
+                    }}
+                    className={`text-xs ${primaryColorClass} hover:underline font-medium mt-1`}
+                  >
+                    Forgot Password?
+                  </button>
+                )}
               </div>
 
               <Button
@@ -333,6 +374,66 @@ export default function LoginPage() {
               </button>
             </p>
           </CardFooter>
+
+          {/* Forgot Password Overlay */}
+          {showForgotPassword && (
+            <div className="absolute inset-0 bg-card/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 rounded-xl">
+              <div className="w-full max-w-xs space-y-5">
+                <div className="text-center space-y-2">
+                  <div className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center ${selectedRole === 'student' ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-indigo-100 dark:bg-indigo-900/30'}`}>
+                    <KeyRound className={`h-7 w-7 ${primaryColorClass}`} />
+                  </div>
+                  <h3 className="text-lg font-bold">
+                    {resetSent ? 'Check Your Email' : 'Reset Password'}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {resetSent
+                      ? `We've sent a password reset link to ${resetEmail}`
+                      : 'Enter your email and we\'ll send you a link to reset your password.'}
+                  </p>
+                </div>
+
+                {!resetSent ? (
+                  <form onSubmit={handleForgotPassword} className="space-y-3">
+                    <div className="relative">
+                      <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="email"
+                        placeholder="you@university.edu"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        className="pl-9 h-9 text-sm"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className={`w-full h-9 text-sm ${bgColorClass} text-white`}
+                      disabled={loading}
+                    >
+                      {loading ? 'Sending...' : 'Send Reset Link'}
+                    </Button>
+                  </form>
+                ) : (
+                  <div className={`p-3 rounded-lg text-center text-sm ${selectedRole === 'student' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400'}`}>
+                    Check your inbox and spam folder. The link expires in 1 hour.
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false)
+                    setResetSent(false)
+                  }}
+                  className={`text-sm ${primaryColorClass} hover:underline font-medium w-full text-center`}
+                >
+                  ← Back to Login
+                </button>
+              </div>
+            </div>
+          )}
         </Tabs>
       </Card>
     </div>
