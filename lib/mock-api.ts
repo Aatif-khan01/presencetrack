@@ -4,6 +4,7 @@ import {
     createUserWithEmailAndPassword,
     signInWithPopup,
     signOut,
+    sendPasswordResetEmail,
     UserCredential
 } from "firebase/auth";
 import {
@@ -128,6 +129,11 @@ export const authAPI = {
             createdAt: createdAt?.toDate?.() ? createdAt.toDate().toISOString() : (typeof createdAt === "string" ? createdAt : null),
         };
         return serializable;
+    },
+
+    resetPassword: async (email: string) => {
+        await sendPasswordResetEmail(auth, email);
+        return { message: "Password reset email sent" };
     },
 
     logout: async () => {
