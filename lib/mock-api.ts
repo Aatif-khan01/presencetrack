@@ -25,6 +25,7 @@ import {
 } from "firebase/firestore";
 import { auth, db, googleProvider } from "./firebase";
 import { User, Room, Session, Member, AttendanceRecord, StudentAnalytics } from "./types";
+import { sanitizeInput, sanitizeEmail, sanitizeEnrollmentNumber } from "./security";
 
 // Helper to get user role from Firestore
 const getUserRole = async (uid: string): Promise<User | null> => {
@@ -52,24 +53,30 @@ export const authAPI = {
     },
 
     register: async (userData: any) => {
+        // Sanitize inputs
+        const cleanName = sanitizeInput(userData.name, 100);
+        const cleanEmail = sanitizeEmail(userData.email);
+        const cleanRole = ['student', 'teacher'].includes(userData.role) ? userData.role : 'student';
+        const cleanEnrollment = userData.enrollmentNumber ? sanitizeEnrollmentNumber(userData.enrollmentNumber) : null;
+
         // Check if enrollment exists for students
-        if (userData.role === 'student' && userData.enrollmentNumber) {
-            const q = query(collection(db, "users"), where("enrollmentNumber", "==", userData.enrollmentNumber));
+        if (cleanRole === 'student' && cleanEnrollment) {
+            const q = query(collection(db, "users"), where("enrollmentNumber", "==", cleanEnrollment));
             const querySnapshot = await getDocs(q);
             if (!querySnapshot.empty) {
                 throw new Error("Enrollment number already exists");
             }
         }
 
-        const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, userData.password);
         const uid = userCredential.user.uid;
 
         const newUser: User = {
             id: uid,
-            name: userData.name,
-            email: userData.email,
-            role: userData.role,
-            enrollmentNumber: userData.enrollmentNumber || null,
+            name: cleanName,
+            email: cleanEmail,
+            role: cleanRole,
+            enrollmentNumber: cleanEnrollment,
             createdAt: serverTimestamp(),
         };
 
@@ -111,11 +118,15 @@ export const authAPI = {
 
     completeProfile: async (data: any) => {
         const uid = data.id;
+        if (!uid || typeof uid !== 'string') throw new Error('Invalid user ID');
         const profileUpdate: any = {};
-        if (data.name != null) profileUpdate.name = String(data.name);
-        if (data.role != null) profileUpdate.role = String(data.role);
-        profileUpdate.enrollmentNumber = data.role === "student" ? (data.enrollmentNumber ? String(data.enrollmentNumber) : null) : null;
-        if (data.photoURL != null && typeof data.photoURL === "string") profileUpdate.photoURL = data.photoURL;
+        if (data.name != null) profileUpdate.name = sanitizeInput(String(data.name), 100);
+        if (data.role != null) {
+            const role = String(data.role);
+            profileUpdate.role = ['student', 'teacher'].includes(role) ? role : 'student';
+        }
+        profileUpdate.enrollmentNumber = data.role === "student" ? (data.enrollmentNumber ? sanitizeEnrollmentNumber(String(data.enrollmentNumber)) : null) : null;
+        if (data.photoURL != null && typeof data.photoURL === "string" && data.photoURL.startsWith('https://')) profileUpdate.photoURL = data.photoURL;
         await setDoc(doc(db, "users", uid), profileUpdate, { merge: true });
         const updated = await getUserRole(uid);
         const createdAt = updated?.createdAt;
@@ -153,10 +164,14 @@ export const roomAPI = {
     create: async (roomData: any, teacherId: string) => {
         const teacherData = await getUserRole(teacherId);
 
+        // Sanitize room inputs
         const newRoom = {
-            ...roomData,
+            roomName: sanitizeInput(roomData.roomName || '', 150),
+            courseCode: sanitizeInput(roomData.courseCode || '', 20),
+            schedule: sanitizeInput(roomData.schedule || '', 200),
+            maxStudents: Math.min(Math.max(1, parseInt(roomData.maxStudents) || 50), 500),
             teacherId,
-            teacherName: teacherData?.name || 'Unknown Teacher',
+            teacherName: sanitizeInput(teacherData?.name || 'Unknown Teacher', 100),
             createdAt: serverTimestamp(),
             memberCount: 0
         };
