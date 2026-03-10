@@ -114,9 +114,9 @@ export default function TeacherDashboard() {
           localStorage.removeItem("presence_token")
         }}
       />
-      <div className="container flex-1 items-start md:grid md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] gap-6 p-6">
+      <div className="container flex-1 items-start md:grid md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] gap-6 p-4 md:p-6 pb-24 md:pb-6">
         <Sidebar className="hidden md:block" role="teacher" />
-        <main className="flex-1 space-y-6">
+        <main className="flex-1 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
@@ -175,8 +175,8 @@ export default function TeacherDashboard() {
             </Dialog>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            <Card className="glass-card">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   Total Rooms
@@ -187,7 +187,7 @@ export default function TeacherDashboard() {
                 <div className="text-2xl font-bold">{stats.totalRooms}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="glass-card">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   Total Students
@@ -198,7 +198,7 @@ export default function TeacherDashboard() {
                 <div className="text-2xl font-bold">{stats.totalStudents}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="glass-card">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   Today&#39;s Sessions
@@ -212,7 +212,7 @@ export default function TeacherDashboard() {
                 </p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="glass-card bg-gradient-to-br from-primary/5 to-transparent border-primary/20">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Active Now</CardTitle>
                 <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -224,9 +224,9 @@ export default function TeacherDashboard() {
             </Card>
           </div>
 
-          <h3 className="text-lg font-semibold mt-8">Your Classrooms</h3>
+          <h3 className="text-lg font-semibold mt-8 animate-in fade-in duration-500 stagger-2">Your Classrooms</h3>
           {rooms.length === 0 ? (
-            <Card className="p-8 text-center border-dashed">
+            <Card className="p-8 text-center border-dashed glass-card animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-3">
               <div className="flex flex-col items-center justify-center space-y-3">
                 <p className="text-muted-foreground">
                   You haven&#39;t created any rooms yet.
@@ -237,11 +237,11 @@ export default function TeacherDashboard() {
               </div>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-3">
               {rooms.map((room) => (
                 <Card
                   key={room.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className="glass-card cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group"
                   onClick={() => router.push(`/room/${room.id}`)}
                 >
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
