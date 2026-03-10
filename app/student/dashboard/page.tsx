@@ -138,7 +138,7 @@ export default function StudentDashboard() {
               ) : (
                 <WifiOff className="h-4 w-4" />
               )}
-              <span className="hidden sm:inline">
+              <span>
                 {wifiStatus === null
                   ? "Checking Wi-Fi..."
                   : wifiStatus
