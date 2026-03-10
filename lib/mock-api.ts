@@ -566,6 +566,137 @@ export const attendanceAPI = {
 // ============ ANALYTICS ============
 
 export const analyticsAPI = {
+    getStudentGamificationStats: async (studentId: string) => {
+        // Get all rooms the student is approved in
+        const membersSnap = await getDocs(query(
+            collection(db, "members"),
+            where("studentId", "==", studentId),
+            where("status", "==", "approved")
+        ));
+        const roomIds = membersSnap.docs.map(d => d.data().roomId);
+
+        if (roomIds.length === 0) {
+            return {
+                streak: 0,
+                bestStreak: 0,
+                totalPresent: 0,
+                totalSessions: 0,
+                weeklyHeatmap: [],
+                subjectStats: []
+            };
+        }
+
+        // Get rooms info, all sessions for those rooms, and student's attendance records
+        const [roomDocs, sessionsSnap, attendanceSnap] = await Promise.all([
+            Promise.all(roomIds.map(id => getDoc(doc(db, "rooms", id)))),
+            getDocs(query(collection(db, "sessions"))),
+            getDocs(query(collection(db, "attendance"), where("studentId", "==", studentId)))
+        ]);
+
+        // Build room lookup
+        const roomMap: Record<string, any> = {};
+        roomDocs.forEach((rd, i) => {
+            if (rd.exists()) roomMap[roomIds[i]] = { ...rd.data(), id: roomIds[i] };
+        });
+
+        // Filter sessions to only the student's rooms
+        const sessions = sessionsSnap.docs
+            .map(d => ({ ...d.data(), id: d.id }))
+            .filter((s: any) => roomIds.includes(s.roomId));
+
+        // Build attendance set (sessionId -> true)
+        const attendedSessionIds = new Set(attendanceSnap.docs.map(d => d.data().sessionId));
+
+        // ===== STREAK CALCULATION =====
+        // Group sessions by date, sorted descending
+        const sessionsByDate: Record<string, any[]> = {};
+        sessions.forEach((s: any) => {
+            if (!sessionsByDate[s.date]) sessionsByDate[s.date] = [];
+            sessionsByDate[s.date].push(s);
+        });
+
+        const sortedDates = Object.keys(sessionsByDate).sort((a, b) => b.localeCompare(a));
+        let streak = 0;
+        let bestStreak = 0;
+        let currentStreak = 0;
+
+        for (const date of sortedDates) {
+            const daySessions = sessionsByDate[date];
+            const wasPresent = daySessions.some((s: any) => attendedSessionIds.has(s.id));
+            if (wasPresent) {
+                currentStreak++;
+                if (currentStreak > bestStreak) bestStreak = currentStreak;
+            } else {
+                currentStreak = 0;
+            }
+        }
+        // Current streak = consecutive present days from most recent
+        streak = 0;
+        for (const date of sortedDates) {
+            const daySessions = sessionsByDate[date];
+            const wasPresent = daySessions.some((s: any) => attendedSessionIds.has(s.id));
+            if (wasPresent) {
+                streak++;
+            } else {
+                break;
+            }
+        }
+
+        // ===== WEEKLY HEATMAP (last 28 days) =====
+        const today = new Date();
+        const heatmap: { date: string; dayName: string; status: 'present' | 'absent' | 'no-session'; count: number }[] = [];
+
+        for (let i = 27; i >= 0; i--) {
+            const d = new Date(today);
+            d.setDate(d.getDate() - i);
+            const dateStr = d.toISOString().split('T')[0];
+            const dayName = d.toLocaleDateString('en', { weekday: 'short' });
+            const daySessions = sessionsByDate[dateStr] || [];
+
+            if (daySessions.length === 0) {
+                heatmap.push({ date: dateStr, dayName, status: 'no-session', count: 0 });
+            } else {
+                const presentCount = daySessions.filter((s: any) => attendedSessionIds.has(s.id)).length;
+                heatmap.push({
+                    date: dateStr,
+                    dayName,
+                    status: presentCount > 0 ? 'present' : 'absent',
+                    count: presentCount
+                });
+            }
+        }
+
+        // ===== SUBJECT-WISE STATS =====
+        const subjectStats: { roomId: string; roomName: string; courseCode: string; present: number; total: number; percentage: number }[] = [];
+
+        for (const roomId of roomIds) {
+            const room = roomMap[roomId];
+            if (!room) continue;
+            const roomSessions = sessions.filter((s: any) => s.roomId === roomId);
+            const presentCount = roomSessions.filter((s: any) => attendedSessionIds.has(s.id)).length;
+            const total = roomSessions.length;
+            subjectStats.push({
+                roomId,
+                roomName: room.roomName,
+                courseCode: room.courseCode,
+                present: presentCount,
+                total,
+                percentage: total > 0 ? Math.round((presentCount / total) * 100) : 0
+            });
+        }
+
+        subjectStats.sort((a, b) => b.percentage - a.percentage);
+
+        return {
+            streak,
+            bestStreak,
+            totalPresent: attendanceSnap.size,
+            totalSessions: sessions.length,
+            weeklyHeatmap: heatmap,
+            subjectStats
+        };
+    },
+
     getRoomAnalytics: async (roomId: string) => {
         const [roomDoc, membersSnap, sessionsSnap, attendanceSnap] = await Promise.all([
             getDoc(doc(db, "rooms", roomId)),
