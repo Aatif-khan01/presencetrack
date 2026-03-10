@@ -3,10 +3,10 @@ import type { NextRequest } from 'next/server';
 import { extractIPFromHeaders, isIPAllowed, isValidIP } from '@/lib/ip-validator';
 
 // Load configuration from environment variables
-const ALLOWED_IP_RANGES = process.env.ALLOWED_IP_RANGES?.split(',').map(r => r.trim()) || ['49.36.201.5/32'];
+const ALLOWED_IP_RANGES = process.env.ALLOWED_IP_RANGES?.split(',').map(r => r.trim()) || ['202.170.202.178/32'];
 const ALLOWED_LOCALHOST = process.env.ALLOWED_LOCALHOST !== 'false';
 const BYPASS_WIFI_CHECK = process.env.BYPASS_WIFI_CHECK === 'true';
-
+//202.170.202.178
 /**
  * Middleware for Wi-Fi based room access control
  * Enforces IP-based restrictions for students accessing rooms
