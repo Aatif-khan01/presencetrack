@@ -161,15 +161,15 @@ export default function StudentDashboard() {
   }
 
   const getPercentageColor = (pct: number) => {
-    if (pct >= 90) return 'text-green-600 dark:text-green-400'
-    if (pct >= 75) return 'text-emerald-600 dark:text-emerald-400'
+    if (pct >= 90) return 'text-primary dark:text-primary'
+    if (pct >= 75) return 'text-accent dark:text-accent'
     if (pct >= 60) return 'text-amber-600 dark:text-amber-400'
     return 'text-red-600 dark:text-red-400'
   }
 
   const getBarColor = (pct: number) => {
-    if (pct >= 90) return 'bg-green-500'
-    if (pct >= 75) return 'bg-emerald-500'
+    if (pct >= 90) return 'bg-primary'
+    if (pct >= 75) return 'bg-accent'
     if (pct >= 60) return 'bg-amber-500'
     return 'bg-red-500'
   }
@@ -195,7 +195,7 @@ export default function StudentDashboard() {
           localStorage.removeItem("presence_token")
         }}
       />
-      <div className="container flex-1 items-start md:grid md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] gap-6 p-6">
+      <div className="container flex-1 items-start md:grid md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] gap-6 p-4 md:p-6 pb-24 md:pb-6">
         <Sidebar className="hidden md:block" role="student" />
         <main className="flex-1 space-y-6">
           <div className="flex items-center justify-between">
@@ -235,7 +235,7 @@ export default function StudentDashboard() {
 
           {/* ===== GAMIFICATION SECTION ===== */}
           {gamification && (
-            <>
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
               {/* Stats Row: Streak, Best Streak, Overall Attendance */}
               <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                 {/* Current Streak */}
@@ -260,7 +260,7 @@ export default function StudentDashboard() {
                 </Card>
 
                 {/* Best Streak */}
-                <Card>
+                <Card className="glass-card">
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
                       <div>
@@ -276,7 +276,7 @@ export default function StudentDashboard() {
                 </Card>
 
                 {/* Overall Attendance */}
-                <Card>
+                <Card className="glass-card">
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
                       <div>
@@ -293,7 +293,7 @@ export default function StudentDashboard() {
                 </Card>
 
                 {/* Classes Attended */}
-                <Card>
+                <Card className="glass-card">
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
                       <div>
@@ -312,7 +312,7 @@ export default function StudentDashboard() {
               {/* Weekly Heatmap + Subject Stats */}
               <div className="grid gap-4 md:grid-cols-2">
                 {/* Weekly Heatmap */}
-                <Card>
+                <Card className="glass-card">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base">Attendance Heatmap</CardTitle>
                     <CardDescription>Last 4 weeks</CardDescription>
@@ -380,7 +380,7 @@ export default function StudentDashboard() {
                 </Card>
 
                 {/* Subject-wise Attendance */}
-                <Card>
+                <Card className="glass-card">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base">Subject-wise Attendance</CardTitle>
                     <CardDescription>Your attendance by course</CardDescription>
@@ -424,7 +424,7 @@ export default function StudentDashboard() {
                   </CardContent>
                 </Card>
               </div>
-            </>
+            </div>
           )}
 
           {/* ===== COURSES SECTION ===== */}
