@@ -16,7 +16,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { roomAPI } from "@/lib/mock-api"
 import { toast } from "sonner"
-import { Search, Users, Globe, Clock } from "lucide-react"
+import { Search, Users, Globe, Clock, Loader2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { User, Room } from "@/lib/types"
 
 interface AvailableRoom extends Room {
@@ -31,7 +32,7 @@ export default function StudentRoomsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [joining, setJoining] = useState<string | null>(null)
-  const [pendingRoomIds, setPendingRoomIds] = useState<Set<string>>(new Set())
+  const [pendingRooms, setPendingRooms] = useState<any[]>([])
 
   useEffect(() => {
     const savedUser = localStorage.getItem("presence_user")
@@ -50,10 +51,13 @@ export default function StudentRoomsPage() {
 
   const fetchRooms = async (userId: string) => {
     try {
-      const data = await roomAPI.getAvailableRooms(userId)
+      const [availData, pendingData] = await Promise.all([
+        roomAPI.getAvailableRooms(userId),
+        roomAPI.getStudentPendingRooms(userId)
+      ])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setAvailableRooms((data.rooms as any[]) || [])
-      setPendingRoomIds(new Set(data.pendingRoomIds || []))
+      setAvailableRooms((availData.rooms as any[]) || [])
+      setPendingRooms(pendingData || [])
     } catch (err) {
       toast.error("Failed to load rooms")
     } finally {
@@ -67,9 +71,9 @@ export default function StudentRoomsPage() {
     try {
       await roomAPI.join(room.id, user)
       toast.success(`Join request sent for ${room.roomName}! Waiting for teacher approval.`)
-      // Add to pending set and remove from available list
-      setPendingRoomIds(prev => new Set(prev).add(room.id))
+      // Move room from available to pending list
       setAvailableRooms(prev => prev.filter(r => r.id !== room.id))
+      setPendingRooms(prev => [...prev, { ...room, requestedAt: new Date().toISOString() }])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       toast.error(err.message)
@@ -117,6 +121,53 @@ export default function StudentRoomsPage() {
               />
             </div>
           </div>
+
+          {/* Pending Requests Section */}
+          {pendingRooms.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Clock className="h-5 w-5 text-amber-500" />
+                Your Pending Requests
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
+                  {pendingRooms.length}
+                </Badge>
+              </h3>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {pendingRooms.map((room: any) => (
+                  <Card
+                    key={room.id}
+                    className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/10"
+                  >
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-1 rounded text-xs font-bold font-mono">
+                          {room.courseCode}
+                        </div>
+                        <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400">
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          Pending
+                        </Badge>
+                      </div>
+                      <CardTitle
+                        className="mt-2 text-xl truncate"
+                        title={room.roomName}
+                      >
+                        {room.roomName}
+                      </CardTitle>
+                      <CardDescription>
+                        Instructor: {room.teacherName}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-amber-700 dark:text-amber-400">
+                        Waiting for teacher approval...
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
 
           {filteredRooms.length === 0 ? (
             <Card className="p-12 text-center bg-muted/50 border-dashed">
