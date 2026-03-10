@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { roomAPI } from "@/lib/mock-api"
 import { toast } from "sonner"
-import { Search, Users, Globe } from "lucide-react"
+import { Search, Users, Globe, Clock } from "lucide-react"
 import { User, Room } from "@/lib/types"
 
 interface AvailableRoom extends Room {
@@ -31,6 +31,7 @@ export default function StudentRoomsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [joining, setJoining] = useState<string | null>(null)
+  const [pendingRoomIds, setPendingRoomIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const savedUser = localStorage.getItem("presence_user")
@@ -52,6 +53,7 @@ export default function StudentRoomsPage() {
       const data = await roomAPI.getAvailableRooms(userId)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setAvailableRooms((data.rooms as any[]) || [])
+      setPendingRoomIds(new Set(data.pendingRoomIds || []))
     } catch (err) {
       toast.error("Failed to load rooms")
     } finally {
@@ -64,8 +66,10 @@ export default function StudentRoomsPage() {
     setJoining(room.id)
     try {
       await roomAPI.join(room.id, user)
-      toast.success(`Joined ${room.roomName} successfully!`)
-      router.push(`/room/${room.id}`)
+      toast.success(`Join request sent for ${room.roomName}! Waiting for teacher approval.`)
+      // Add to pending set and remove from available list
+      setPendingRoomIds(prev => new Set(prev).add(room.id))
+      setAvailableRooms(prev => prev.filter(r => r.id !== room.id))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       toast.error(err.message)
@@ -172,7 +176,7 @@ export default function StudentRoomsPage() {
                       onClick={() => handleJoinRoom(room)}
                       disabled={joining === room.id}
                     >
-                      {joining === room.id ? "Joining..." : "Join Class"}
+                      {joining === room.id ? "Sending Request..." : "Request to Join"}
                     </Button>
                   </CardFooter>
                 </Card>
