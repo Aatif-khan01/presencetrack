@@ -183,10 +183,17 @@ export const roomAPI = {
 
         if (roomIds.length === 0) return { rooms: [] };
 
+        // Only show rooms where student is APPROVED
+        const approvedRoomIds = membersSnap.docs
+            .filter((d) => d.data().status === 'approved')
+            .map((d) => d.data().roomId);
+
+        if (approvedRoomIds.length === 0) return { rooms: [] };
+
         const today = new Date().toISOString().split("T")[0];
 
         const [roomDocs, sessionsSnap, attendanceSnap] = await Promise.all([
-            Promise.all(roomIds.map((roomId) => getDoc(doc(db, "rooms", roomId)))),
+            Promise.all(approvedRoomIds.map((roomId) => getDoc(doc(db, "rooms", roomId)))),
             getDocs(query(
                 collection(db, "sessions"),
                 where("date", "==", today),
@@ -199,13 +206,13 @@ export const roomAPI = {
         ]);
 
         const rooms = roomDocs
-            .map((roomDoc, i) => (roomDoc.exists() ? { ...roomDoc.data(), id: roomIds[i] } : null))
+            .map((roomDoc, i) => (roomDoc.exists() ? { ...roomDoc.data(), id: approvedRoomIds[i] } : null))
             .filter(Boolean);
 
         const activeSessionsByRoom: Record<string, any> = {};
         sessionsSnap.docs.forEach((d) => {
             const data = d.data();
-            if (roomIds.includes(data.roomId)) {
+            if (approvedRoomIds.includes(data.roomId)) {
                 activeSessionsByRoom[data.roomId] = { ...data, id: d.id };
             }
         });
@@ -241,7 +248,9 @@ export const roomAPI = {
             ))
         ]);
 
-        if (!roomDoc.exists() || memberSnap.empty) return null;
+        // Must be an approved member to access room
+        const approvedMember = !memberSnap.empty && memberSnap.docs.some(d => d.data().status === 'approved');
+        if (!roomDoc.exists() || !approvedMember) return null;
 
         const room = { ...roomDoc.data(), id: roomId };
         const session = !sessionsSnap.empty ? { ...sessionsSnap.docs[0].data(), id: sessionsSnap.docs[0].id } : null;
@@ -269,11 +278,22 @@ export const roomAPI = {
             getDocs(query(collection(db, "members"), where("studentId", "==", studentId))),
             getDocs(query(collection(db, "rooms"), limit(100)))
         ]);
-        const joinedRoomIds = new Set(membersSnap.docs.map((d) => d.data().roomId));
+        // Exclude rooms where student is pending or approved (only show truly new rooms)
+        const existingRoomIds = new Set(
+            membersSnap.docs
+                .filter(d => d.data().status === 'pending' || d.data().status === 'approved')
+                .map((d) => d.data().roomId)
+        );
+        // Track pending room IDs for the UI
+        const pendingRoomIds = new Set(
+            membersSnap.docs
+                .filter(d => d.data().status === 'pending')
+                .map((d) => d.data().roomId)
+        );
         const allRooms = roomSnap.docs.map((d) => ({ ...d.data(), id: d.id }));
-        const availableRooms = allRooms.filter((r: any) => !joinedRoomIds.has(r.id));
+        const availableRooms = allRooms.filter((r: any) => !existingRoomIds.has(r.id));
         availableRooms.sort((a: any, b: any) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
-        return { rooms: availableRooms };
+        return { rooms: availableRooms, pendingRoomIds: Array.from(pendingRoomIds) };
     },
 
     join: async (roomId: string, student: User) => {
@@ -283,22 +303,59 @@ export const roomAPI = {
             where("studentId", "==", student.id)
         );
         const snap = await getDocs(q);
-        if (!snap.empty) throw new Error("Already joined this room");
+        // Check if already pending or approved
+        if (!snap.empty) {
+            const existing = snap.docs[0].data();
+            if (existing.status === 'pending') throw new Error("Join request already pending");
+            if (existing.status === 'approved') throw new Error("Already joined this room");
+            // If rejected, allow re-request by updating status
+            if (existing.status === 'rejected') {
+                await updateDoc(doc(db, "members", snap.docs[0].id), {
+                    status: 'pending',
+                    joinedAt: serverTimestamp()
+                });
+                return { message: "Join request re-submitted" };
+            }
+        }
 
         const newMember = {
             roomId,
             studentId: student.id,
             enrollmentNumber: student.enrollmentNumber || "N/A",
             studentName: student.name,
+            status: 'pending' as const,
             joinedAt: serverTimestamp()
         };
 
+        // Don't increment memberCount yet — only on approval
+        await addDoc(collection(db, "members"), newMember);
+        return { message: "Join request sent! Waiting for teacher approval." };
+    },
+
+    getPendingRequests: async (roomId: string) => {
+        const q = query(
+            collection(db, "members"),
+            where("roomId", "==", roomId),
+            where("status", "==", "pending")
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
+
+    approveRequest: async (memberId: string, roomId: string) => {
+        const memberRef = doc(db, "members", memberId);
         const roomRef = doc(db, "rooms", roomId);
         await Promise.all([
-            addDoc(collection(db, "members"), newMember),
+            updateDoc(memberRef, { status: 'approved' }),
             updateDoc(roomRef, { memberCount: increment(1) })
         ]);
-        return { message: "Joined successfully" };
+        return { message: "Student approved" };
+    },
+
+    rejectRequest: async (memberId: string) => {
+        const memberRef = doc(db, "members", memberId);
+        await updateDoc(memberRef, { status: 'rejected' });
+        return { message: "Student rejected" };
     },
 
     getDetails: async (roomId: string) => {
@@ -309,7 +366,10 @@ export const roomAPI = {
         const [roomDoc, membersSnap] = await Promise.all([roomPromise, membersPromise]);
 
         if (!roomDoc.exists()) throw new Error('Room not found');
-        const members = membersSnap.docs.map(d => d.data());
+        // Only return approved members
+        const members = membersSnap.docs
+            .filter(d => d.data().status === 'approved')
+            .map(d => ({ id: d.id, ...d.data() }));
 
         return { room: { ...roomDoc.data(), id: roomId }, members };
     }
