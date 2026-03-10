@@ -15,6 +15,7 @@ function AccessDeniedContent() {
   const detectedIP = searchParams.get('ip') || 'Unknown'
   const reason = searchParams.get('reason') || 'IP not in allowed range'
   const isPrivateRelay = searchParams.get('privateRelay') === 'true'
+  const returnTo = searchParams.get('returnTo') || '/student/dashboard'
 
   useEffect(() => {
     // Fetch network status
@@ -206,7 +207,10 @@ function AccessDeniedContent() {
         <div className="flex flex-col gap-3">
           <Button 
             size="lg" 
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              // Navigate back to the original page the user was trying to access
+              window.location.href = returnTo
+            }}
             className="w-full"
           >
             {isPrivateRelay ? 'I\'ve Disabled Private Relay — Retry' : 'Retry Connection'}
