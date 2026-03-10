@@ -24,7 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { roomAPI, attendanceAPI, analyticsAPI } from "@/lib/mock-api"
 import { toast } from "sonner"
-import { Play, Square, Download } from "lucide-react"
+import { Play, Square, Download, Check, X, Clock } from "lucide-react"
 import { User, Room, Member, Session, StudentAnalytics } from "@/lib/types"
 
 interface AnalyticsData {
@@ -57,6 +57,7 @@ export default function RoomDetailsPage() {
     null
   )
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [pendingRequests, setPendingRequests] = useState<Member[]>([])
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [loading, setLoading] = useState(true)
 
@@ -89,6 +90,11 @@ export default function RoomDetailsPage() {
       setSessions(loadedSessions)
       setActiveSession(loadedSessions.find((s) => s.active) || null)
       if (anaData) setAnalytics(anaData as unknown as AnalyticsData)
+      // Fetch pending requests for teachers
+      if (isTeacher) {
+        const pending = await roomAPI.getPendingRequests(roomId)
+        setPendingRequests(pending as Member[])
+      }
     } catch (err) {
       toast.error("Failed to load room data")
     } finally {
@@ -105,6 +111,28 @@ export default function RoomDetailsPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       toast.error(err.message)
+    }
+  }
+
+  const handleApproveRequest = async (member: Member) => {
+    if (!room || !user || !member.id) return
+    try {
+      await roomAPI.approveRequest(member.id, room.id)
+      toast.success(`${member.studentName} approved!`)
+      fetchData(user, room.id)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to approve')
+    }
+  }
+
+  const handleRejectRequest = async (member: Member) => {
+    if (!room || !user || !member.id) return
+    try {
+      await roomAPI.rejectRequest(member.id)
+      toast.success(`${member.studentName} rejected`)
+      fetchData(user, room.id)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reject')
     }
   }
 
@@ -260,6 +288,16 @@ export default function RoomDetailsPage() {
           <Tabs defaultValue="students" className="space-y-4">
             <TabsList>
               <TabsTrigger value="students">Students</TabsTrigger>
+              {user.role === "teacher" && (
+                <TabsTrigger value="pending" className="relative">
+                  Pending Requests
+                  {pendingRequests.length > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-amber-500 rounded-full">
+                      {pendingRequests.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+              )}
               <TabsTrigger value="attendance">Attendance History</TabsTrigger>
               {user.role === "teacher" && (
                 <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -338,6 +376,81 @@ export default function RoomDetailsPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Pending Requests Tab (Teacher only) */}
+            {user.role === "teacher" && (
+              <TabsContent value="pending">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-amber-500" />
+                      Pending Join Requests
+                    </CardTitle>
+                    <CardDescription>
+                      {pendingRequests.length} student{pendingRequests.length !== 1 ? 's' : ''} waiting for approval
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {pendingRequests.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No pending requests
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Enrollment No.</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Requested</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pendingRequests.map((member) => (
+                            <TableRow key={member.id}>
+                              <TableCell className="font-mono">
+                                {member.enrollmentNumber}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {member.studentName}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {member.joinedAt
+                                  ? new Date(
+                                      member.joinedAt?.toDate?.() ??
+                                        member.joinedAt
+                                    ).toLocaleDateString()
+                                  : "-"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleApproveRequest(member)}
+                                  >
+                                    <Check className="h-4 w-4 mr-1" />
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleRejectRequest(member)}
+                                  >
+                                    <X className="h-4 w-4 mr-1" />
+                                    Reject
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
 
             <TabsContent value="attendance">
               <Card>
