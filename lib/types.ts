@@ -30,10 +30,12 @@ export interface Session {
 }
 
 export interface Member {
+    id?: string;
     roomId: string;
     studentId: string;
     enrollmentNumber: string;
     studentName: string;
+    status: 'pending' | 'approved' | 'rejected';
     joinedAt: any;
 }
 
