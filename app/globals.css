@@ -4,8 +4,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    /* Pure white */
+    --background: 240 10% 98%; /* Light slate background */
     --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
@@ -14,8 +13,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 215 25% 27%;
-    /* #364152 - Professional slate blue */
+    --primary: 262.1 83.3% 57.8%; /* Vibrant Violet */
     --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
@@ -24,8 +22,7 @@
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 186 100% 42%;
-    /* #00B8D4 - Professional teal */
+    --accent: 188 86% 53%; /* Bright Cyan */
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
@@ -33,10 +30,9 @@
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 215 25% 27%;
+    --ring: 262.1 83.3% 57.8%; /* Ring syncs with Primary */
 
-    --radius: 0.75rem;
-    /* rounded-xl */
+    --radius: 1rem; /* Softer, larger border radius */
   }
 
   .dark {
@@ -49,8 +45,8 @@
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 262 83.3% 57.8%;
+    --primary-foreground: 210 40% 98%;
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -58,15 +54,15 @@
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 36 100% 50%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 188 86% 53%;
+    --accent-foreground: 0 0% 0%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --ring: 262 83.3% 57.8%;
   }
 }
 
@@ -78,6 +74,22 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-xl;
+  }
+  
+  .glass-card {
+    @apply bg-white/50 dark:bg-slate-800/50 backdrop-blur-lg border border-white/20 dark:border-white/10 shadow-sm hover:shadow-lg transition-all duration-300;
+  }
+
+  .stagger-1 { animation-delay: 100ms; }
+  .stagger-2 { animation-delay: 200ms; }
+  .stagger-3 { animation-delay: 300ms; }
+  .stagger-4 { animation-delay: 400ms; }
+  .stagger-5 { animation-delay: 500ms; }
 }
 
 /* Animations */
