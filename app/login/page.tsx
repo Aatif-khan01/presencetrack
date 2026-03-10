@@ -84,13 +84,21 @@ export default function LoginPage() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleAuthSuccess = (data: any) => {
+  const handleAuthSuccess = async (data: any) => {
     localStorage.setItem("presence_token", data.token)
     localStorage.setItem("presence_user", JSON.stringify(data.user))
 
-    // Set cookie for middleware access control
-    const isSecure = window.location.protocol === 'https:';
-    document.cookie = `presence_role=${data.user.role}; path=/; max-age=86400; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+    // Set HttpOnly cookie via server-side API (prevents XSS cookie spoofing)
+    try {
+      await fetch('/api/auth/set-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: data.user.role, token: data.token }),
+      });
+    } catch {
+      // Cookie setting failure is non-fatal — middleware will deny access if needed
+      console.warn('Failed to set role cookie');
+    }
 
     toast.success(isLogin ? "Welcome back!" : "Account created successfully!")
 
