@@ -100,8 +100,10 @@ function createAccessDeniedResponse(request: NextRequest, ip: string, reason?: s
 
     // For Pages, redirect to /access-denied with IP info
     const url = request.nextUrl.clone();
+    const originalPath = pathname + request.nextUrl.search;
     url.pathname = '/access-denied';
     url.searchParams.set('ip', ip);
+    url.searchParams.set('returnTo', originalPath);
     if (reason) {
         url.searchParams.set('reason', reason);
     }
