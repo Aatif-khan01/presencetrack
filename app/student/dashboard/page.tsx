@@ -32,7 +32,8 @@ export default function StudentDashboard() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [wifiStatus, setWifiStatus] = useState(true) // Mock status
+  const [wifiStatus, setWifiStatus] = useState<boolean | null>(null) // null = checking
+  const [detectedIP, setDetectedIP] = useState<string>("")
 
   useEffect(() => {
     const savedUser = localStorage.getItem("presence_user")
@@ -47,16 +48,27 @@ export default function StudentDashboard() {
     }
     setUser(userData)
     fetchRooms(userData.id)
+
+    // Initial check
     checkNetworkStatus()
+
+    // Poll every 15 seconds for real-time updates
+    const interval = setInterval(checkNetworkStatus, 15000)
+    return () => clearInterval(interval)
   }, [])
 
   const checkNetworkStatus = async () => {
     try {
       const res = await fetch("/api/network-status")
-      if (res.ok) {
+      const data = await res.json()
+      // Use onCampus (not just allowed) so localhost doesn't falsely show as campus Wi-Fi
+      if (data.success && data.onCampus) {
         setWifiStatus(true)
       } else {
         setWifiStatus(false)
+      }
+      if (data.detectedIP) {
+        setDetectedIP(data.detectedIP)
       }
     } catch (error) {
       console.error("Network check failed", error)
@@ -110,20 +122,32 @@ export default function StudentDashboard() {
               <p className="text-muted-foreground">Welcome back, {user.name}</p>
             </div>
             <div
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-                wifiStatus
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm cursor-default transition-colors ${
+                wifiStatus === null
+                  ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                  : wifiStatus
                   ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                   : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
               }`}
+              title={detectedIP ? `Your IP: ${detectedIP}` : "Checking network..."}
             >
-              {wifiStatus ? (
+              {wifiStatus === null ? (
+                <Wifi className="h-4 w-4 animate-pulse" />
+              ) : wifiStatus ? (
                 <Wifi className="h-4 w-4" />
               ) : (
                 <WifiOff className="h-4 w-4" />
               )}
               <span className="hidden sm:inline">
-                {wifiStatus ? "Campus Wi-Fi Connected" : "Wi-Fi Disconnected"}
+                {wifiStatus === null
+                  ? "Checking Wi-Fi..."
+                  : wifiStatus
+                  ? "Campus Wi-Fi Connected"
+                  : "Not on Campus Wi-Fi"}
               </span>
+              {wifiStatus === null && (
+                <span className="flex h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+              )}
             </div>
           </div>
 
