@@ -21,17 +21,22 @@ export async function GET(request: Request) {
 
         const ip = extractIPFromHeaders(headers);
         const isValid = isValidIP(ip);
+        const isLocal = ip === '127.0.0.1' || ip === '::1';
         const isAllowed = isValid && isIPAllowed(ip, ALLOWED_IP_RANGES, ALLOWED_LOCALHOST);
+        // onCampus = truly on campus Wi-Fi (allowed AND not just localhost)
+        const onCampus = isAllowed && !isLocal;
 
         return NextResponse.json({
             success: true,
             detectedIP: ip,
             isValid,
             allowed: isAllowed,
+            isLocalhost: isLocal,
+            onCampus,
             allowedRanges: ALLOWED_IP_RANGES,
             timestamp: new Date().toISOString(),
             diagnostics: {
-                isLocalhost: ip === '127.0.0.1' || ip === '::1',
+                isLocalhost: isLocal,
                 ipVersion: ip.includes(':') ? 'IPv6' : 'IPv4',
                 headers: {
                     'x-forwarded-for': request.headers.get('x-forwarded-for'),
