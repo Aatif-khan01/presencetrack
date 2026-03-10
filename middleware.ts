@@ -9,13 +9,10 @@ const BYPASS_WIFI_CHECK = process.env.BYPASS_WIFI_CHECK === 'true';
 
 /**
  * Detect if the request is coming from iOS Safari
- * This helps identify users who may have iCloud Private Relay enabled,
- * which masks their real IP and breaks Wi-Fi-based verification.
  */
 function isIOSSafari(userAgent: string | null): boolean {
     if (!userAgent) return false;
     const ua = userAgent.toLowerCase();
-    // iOS Safari: contains 'iphone' or 'ipad', contains 'safari', and does NOT contain 'crios' (Chrome) or 'fxios' (Firefox)
     const isIOS = ua.includes('iphone') || ua.includes('ipad');
     const isSafari = ua.includes('safari') && !ua.includes('crios') && !ua.includes('fxios') && !ua.includes('edgios');
     return isIOS && isSafari;
@@ -31,45 +28,34 @@ export function middleware(request: NextRequest) {
     // Only enforce for /room/* and /api/attendance/* routes
     if (pathname.startsWith('/room/') || pathname.startsWith('/api/attendance/')) {
 
-        // Development bypass (use with caution!)
+        // Development bypass
         if (BYPASS_WIFI_CHECK) {
-            console.warn('[Middleware] ⚠️  Wi-Fi check bypassed via environment variable');
             return NextResponse.next();
         }
 
-        // 1. Check User Role (Exempt Teachers)
+        // 1. Check User Role (Exempt Teachers) — uses HttpOnly cookie set by server
         const roleCookie = request.cookies.get('presence_role');
         const role = roleCookie?.value;
 
         if (role?.toLowerCase() === 'teacher') {
-            console.log('[Middleware] ✅ Teacher access granted (role-based exemption)');
             return NextResponse.next();
-        } else {
-            console.log(`[Middleware] ℹ️ Role check failed. Cookie: ${role || 'missing'}, check: ${role === 'teacher'}`);
         }
 
         // 2. Extract and validate IP address
         const ip = extractIPFromHeaders(request.headers);
 
-        // Validate IP format
         if (!isValidIP(ip)) {
-            console.error(`[Middleware] ❌ Invalid IP format: ${ip}`);
-            return createAccessDeniedResponse(request, ip, 'Invalid IP format');
+            return createAccessDeniedResponse(request, 'Invalid network detected');
         }
 
         // 3. Check if IP is in allowed ranges
         const isAllowed = isIPAllowed(ip, ALLOWED_IP_RANGES, ALLOWED_LOCALHOST);
 
         if (!isAllowed) {
-            const timestamp = new Date().toISOString();
             const userAgent = request.headers.get('user-agent');
             const privateRelay = isIOSSafari(userAgent);
-            console.log(`[Middleware] 🚫 Access Denied | Time: ${timestamp} | IP: ${ip} | Path: ${pathname} | Role: ${role || 'none'} | iOS Safari: ${privateRelay}`);
-            return createAccessDeniedResponse(request, ip, undefined, privateRelay);
+            return createAccessDeniedResponse(request, undefined, privateRelay);
         }
-
-        // Access granted
-        console.log(`[Middleware] ✅ Access Granted | IP: ${ip} | Path: ${pathname}`);
     }
 
     return NextResponse.next();
@@ -77,32 +63,29 @@ export function middleware(request: NextRequest) {
 
 /**
  * Create appropriate access denied response
- * NOTE: We use the full request URL to avoid runtime errors in middleware.
+ * SECURITY: Does NOT leak IP addresses, allowed ranges, or internal details
  */
-function createAccessDeniedResponse(request: NextRequest, ip: string, reason?: string, privateRelay?: boolean): NextResponse {
+function createAccessDeniedResponse(request: NextRequest, reason?: string, privateRelay?: boolean): NextResponse {
     const { pathname } = request.nextUrl;
+
     // For API routes, return 403 JSON
     if (pathname.startsWith('/api/')) {
         return NextResponse.json(
             {
-                error: 'Access Denied: Invalid Network',
+                error: 'Access Denied',
                 message: privateRelay
                     ? 'iCloud Private Relay detected. Please disable Private Relay for this website in Safari settings to mark attendance.'
                     : 'Please connect to the university Wi-Fi to access this resource.',
-                detectedIP: ip,
-                reason: reason || 'IP not in allowed range',
                 privateRelay: privateRelay || false,
-                allowedRanges: ALLOWED_IP_RANGES
             },
             { status: 403 }
         );
     }
 
-    // For Pages, redirect to /access-denied with IP info
+    // For Pages, redirect to /access-denied
     const url = request.nextUrl.clone();
     const originalPath = pathname + request.nextUrl.search;
     url.pathname = '/access-denied';
-    url.searchParams.set('ip', ip);
     url.searchParams.set('returnTo', originalPath);
     if (reason) {
         url.searchParams.set('reason', reason);
