@@ -358,6 +358,32 @@ export const roomAPI = {
         return { message: "Student rejected" };
     },
 
+    getStudentPendingRooms: async (studentId: string) => {
+        const membersSnap = await getDocs(query(
+            collection(db, "members"),
+            where("studentId", "==", studentId),
+            where("status", "==", "pending")
+        ));
+        if (membersSnap.empty) return [];
+
+        const pendingRoomIds = membersSnap.docs.map(d => d.data().roomId);
+        const roomDocs = await Promise.all(
+            pendingRoomIds.map(roomId => getDoc(doc(db, "rooms", roomId)))
+        );
+
+        return roomDocs
+            .map((roomDoc, i) => {
+                if (!roomDoc.exists()) return null;
+                const memberDoc = membersSnap.docs[i];
+                return {
+                    ...roomDoc.data(),
+                    id: pendingRoomIds[i],
+                    requestedAt: memberDoc.data().joinedAt
+                };
+            })
+            .filter(Boolean);
+    },
+
     getDetails: async (roomId: string) => {
         const roomPromise = getDoc(doc(db, "rooms", roomId));
         const membersQ = query(collection(db, "members"), where("roomId", "==", roomId));
