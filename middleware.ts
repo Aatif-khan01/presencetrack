@@ -3,10 +3,24 @@ import type { NextRequest } from 'next/server';
 import { extractIPFromHeaders, isIPAllowed, isValidIP } from '@/lib/ip-validator';
 
 // Load configuration from environment variables
-const ALLOWED_IP_RANGES = process.env.ALLOWED_IP_RANGES?.split(',').map(r => r.trim()) || ['202.170.202.178/32'];
+const ALLOWED_IP_RANGES = process.env.ALLOWED_IP_RANGES?.split(',').map(r => r.trim()) || ['49.36.201.5/32'];
 const ALLOWED_LOCALHOST = process.env.ALLOWED_LOCALHOST !== 'false';
 const BYPASS_WIFI_CHECK = process.env.BYPASS_WIFI_CHECK === 'true';
-//202.170.202.178
+
+/**
+ * Detect if the request is coming from iOS Safari
+ * This helps identify users who may have iCloud Private Relay enabled,
+ * which masks their real IP and breaks Wi-Fi-based verification.
+ */
+function isIOSSafari(userAgent: string | null): boolean {
+    if (!userAgent) return false;
+    const ua = userAgent.toLowerCase();
+    // iOS Safari: contains 'iphone' or 'ipad', contains 'safari', and does NOT contain 'crios' (Chrome) or 'fxios' (Firefox)
+    const isIOS = ua.includes('iphone') || ua.includes('ipad');
+    const isSafari = ua.includes('safari') && !ua.includes('crios') && !ua.includes('fxios') && !ua.includes('edgios');
+    return isIOS && isSafari;
+}
+
 /**
  * Middleware for Wi-Fi based room access control
  * Enforces IP-based restrictions for students accessing rooms
@@ -48,8 +62,10 @@ export function middleware(request: NextRequest) {
 
         if (!isAllowed) {
             const timestamp = new Date().toISOString();
-            console.log(`[Middleware] 🚫 Access Denied | Time: ${timestamp} | IP: ${ip} | Path: ${pathname} | Role: ${role || 'none'}`);
-            return createAccessDeniedResponse(request, ip);
+            const userAgent = request.headers.get('user-agent');
+            const privateRelay = isIOSSafari(userAgent);
+            console.log(`[Middleware] 🚫 Access Denied | Time: ${timestamp} | IP: ${ip} | Path: ${pathname} | Role: ${role || 'none'} | iOS Safari: ${privateRelay}`);
+            return createAccessDeniedResponse(request, ip, undefined, privateRelay);
         }
 
         // Access granted
@@ -63,16 +79,19 @@ export function middleware(request: NextRequest) {
  * Create appropriate access denied response
  * NOTE: We use the full request URL to avoid runtime errors in middleware.
  */
-function createAccessDeniedResponse(request: NextRequest, ip: string, reason?: string): NextResponse {
+function createAccessDeniedResponse(request: NextRequest, ip: string, reason?: string, privateRelay?: boolean): NextResponse {
     const { pathname } = request.nextUrl;
     // For API routes, return 403 JSON
     if (pathname.startsWith('/api/')) {
         return NextResponse.json(
             {
                 error: 'Access Denied: Invalid Network',
-                message: 'Please connect to the university Wi-Fi to access this resource.',
+                message: privateRelay
+                    ? 'iCloud Private Relay detected. Please disable Private Relay for this website in Safari settings to mark attendance.'
+                    : 'Please connect to the university Wi-Fi to access this resource.',
                 detectedIP: ip,
                 reason: reason || 'IP not in allowed range',
+                privateRelay: privateRelay || false,
                 allowedRanges: ALLOWED_IP_RANGES
             },
             { status: 403 }
@@ -85,6 +104,9 @@ function createAccessDeniedResponse(request: NextRequest, ip: string, reason?: s
     url.searchParams.set('ip', ip);
     if (reason) {
         url.searchParams.set('reason', reason);
+    }
+    if (privateRelay) {
+        url.searchParams.set('privateRelay', 'true');
     }
 
     return NextResponse.redirect(url);
