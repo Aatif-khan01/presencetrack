@@ -3,8 +3,6 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signInWithPopup,
-    signInWithRedirect,
-    getRedirectResult,
     signOut,
     sendPasswordResetEmail,
     UserCredential
@@ -92,40 +90,6 @@ export const authAPI = {
 
     loginWithGoogle: async (role: string = "student") => {
         const result = await signInWithPopup(auth, googleProvider);
-        const uid = result.user.uid;
-
-        // Check if user exists
-        let userData = await getUserRole(uid);
-
-        if (!userData) {
-            return {
-                token: await result.user.getIdToken(),
-                user: {
-                    id: uid,
-                    name: result.user.displayName || "Unknown",
-                    email: result.user.email || "",
-                    photoURL: result.user.photoURL,
-                    role: role as 'student' | 'teacher'
-                },
-                isNewUser: true
-            };
-        }
-
-        return {
-            token: await result.user.getIdToken(),
-            user: { ...userData, id: uid },
-            isNewUser: false
-        };
-    },
-
-    loginWithGoogleRedirect: async () => {
-        await signInWithRedirect(auth, googleProvider);
-    },
-
-    checkGoogleRedirectResult: async (role: string = "student") => {
-        const result = await getRedirectResult(auth);
-        if (!result) return null;
-
         const uid = result.user.uid;
 
         // Check if user exists
