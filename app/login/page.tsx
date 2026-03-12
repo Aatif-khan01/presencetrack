@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { authAPI } from "@/lib/mock-api"
@@ -54,6 +54,39 @@ export default function LoginPage() {
     }
   }
 
+  // Handle returning from a Google redirect
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const storedRole = sessionStorage.getItem("pending_google_role") || "student"
+        const data = await authAPI.checkGoogleRedirectResult(storedRole)
+        
+        if (data) {
+          sessionStorage.removeItem("pending_google_role")
+          
+          if (data.isNewUser) {
+            localStorage.setItem("pending_role", storedRole)
+            localStorage.setItem("presence_user", JSON.stringify(data.user))
+            toast.success("Welcome! Please complete your profile.")
+            router.push("/complete-profile")
+            return
+          }
+
+          if (data.user.role !== storedRole) {
+            toast.warning(`Note: You are logged in as a ${data.user.role}`)
+          }
+
+          handleAuthSuccess(data)
+        }
+      } catch (err: any) {
+        console.error("Redirect check failed:", err)
+        toast.error("Failed to process Google login")
+      }
+    }
+
+    handleRedirectResult()
+  }, [router])
+
   const handleGoogleLogin = async () => {
     try {
       setLoading(true)
@@ -78,8 +111,20 @@ export default function LoginPage() {
 
       handleAuthSuccess(data)
     } catch (err: any) {
-      toast.error(err.message)
-      setLoading(false)
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/popup-blocked') {
+        // Fallback to redirect if popup fails or is blocked
+        toast.info("Popup blocked. Redirecting to Google login...")
+        sessionStorage.setItem("pending_google_role", selectedRole)
+        try {
+          await authAPI.loginWithGoogleRedirect()
+        } catch (redirectErr: any) {
+          toast.error("Redirect login failed: " + redirectErr.message)
+          setLoading(false)
+        }
+      } else {
+        toast.error(err.message || "Failed to login with Google")
+        setLoading(false)
+      }
     }
   }
 
