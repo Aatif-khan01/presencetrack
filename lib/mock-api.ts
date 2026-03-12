@@ -2,7 +2,8 @@
 import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
-    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     signOut,
     sendPasswordResetEmail,
     UserCredential
@@ -89,8 +90,21 @@ export const authAPI = {
     },
 
     loginWithGoogle: async (role: string = "student") => {
-        const result = await signInWithPopup(auth, googleProvider);
+        // We set the intended role in local storage before redirecting
+        localStorage.setItem("intended_role", role);
+        await signInWithRedirect(auth, googleProvider);
+        // This won't return anything because the page redirects
+        return null;
+    },
+
+    getGoogleRedirectResult: async () => {
+        const result = await getRedirectResult(auth);
+        if (!result) return null;
+
         const uid = result.user.uid;
+        // Retrieve the intended role we saved before redirecting
+        const role = localStorage.getItem("intended_role") || "student";
+        localStorage.removeItem("intended_role"); // Clean it up
 
         // Check if user exists
         let userData = await getUserRole(uid);
@@ -115,6 +129,7 @@ export const authAPI = {
             isNewUser: false
         };
     },
+
 
     completeProfile: async (data: any) => {
         const uid = data.id;
