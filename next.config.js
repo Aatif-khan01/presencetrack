@@ -39,6 +39,8 @@ const nextConfig = {
                     { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
                     // Force HTTPS (uncomment in production with actual SSL)
                     // { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+                    // Allow cross-origin popups for Firebase Auth
+                    { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
                 ],
             },
             {
