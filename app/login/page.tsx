@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { User, Mail, Hash, ArrowLeft, KeyRound } from "lucide-react"
-import { useEffect } from "react"
 import Image from "next/image"
 
 export default function LoginPage() {
@@ -33,40 +32,6 @@ export default function LoginPage() {
     password: "",
     enrollmentNumber: "",
   })
-
-  useEffect(() => {
-    const handleRedirect = async () => {
-      try {
-        setLoading(true)
-        const data = await authAPI.getGoogleRedirectResult()
-        
-        if (data) {
-          const storedRole = localStorage.getItem("intended_role") || "student"
-          
-          if (data.isNewUser) {
-            localStorage.setItem("pending_role", storedRole)
-            localStorage.setItem("presence_user", JSON.stringify(data.user))
-            toast.success("Welcome! Please complete your profile.")
-            router.push("/complete-profile")
-            return
-          }
-
-          if (data.user.role !== storedRole) {
-            toast.warning(`Note: You are logged in as a ${data.user.role}`)
-          }
-
-          handleAuthSuccess(data)
-        }
-      } catch (err: any) {
-        toast.error(err.message || "Failed to sign in with Google")
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    handleRedirect()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,10 +57,28 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true)
-      await authAPI.loginWithGoogle(selectedRole)
-      // The page will redirect to Google here
+      const data = await authAPI.loginWithGoogle(selectedRole)
+
+      // If new user, we need to ensure role is set correctly in profile completion
+      if (data.isNewUser) {
+        // Store selected role for profile completion page to use
+        localStorage.setItem("pending_role", selectedRole)
+        // CRITICAL FIX: Store the partial user data so CompleteProfilePage has it
+        localStorage.setItem("presence_user", JSON.stringify(data.user))
+        
+        toast.success("Welcome! Please complete your profile.")
+        router.push("/complete-profile")
+        return
+      }
+
+      // If existing user, verify role match (optional security/UX check)
+      if (data.user.role !== selectedRole) {
+        toast.warning(`Note: You are logged in as a ${data.user.role}`)
+      }
+
+      handleAuthSuccess(data)
     } catch (err: any) {
-      toast.error(err.message || "Could not launch Google Sign In")
+      toast.error(err.message)
       setLoading(false)
     }
   }
